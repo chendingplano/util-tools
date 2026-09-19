@@ -1269,7 +1269,10 @@ func TestSearch(t *testing.T) {
 
 func TestSearchRanksMoreMatchesFirst(t *testing.T) {
 	c, _ := Build([]string{"typst-ref", "tool-index"}, fakeRunner(fixtures))
-	got := c.Search([]string{"typst", "tools"})
+	// typst-ref matches "typst" and "references" (2); tool-index matches
+	// "discover" (1). Ranking by match count must beat the alphabetical
+	// tie-break, which would otherwise put tool-index first.
+	got := c.Search([]string{"typst", "references", "discover"})
 	if len(got) != 2 {
 		t.Fatalf("Search() = %d results, want 2", len(got))
 	}
