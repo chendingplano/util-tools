@@ -95,18 +95,25 @@ directly and wrap it in an HTTP handler, instead of shelling out to a binary.
 Projects that do so write their own thin handler and UI; the tools module ships
 no web code.
 
-### 2.5 Binaries live in `~/go/bin`
+### 2.5 Binaries live in `$(go env GOPATH)/bin`
 
 Installation is `go install ./cmd/...` per module, which places binaries in
-`$(go env GOBIN)`, defaulting to `~/go/bin`.
+`$(go env GOBIN)`, falling back to `$(go env GOPATH)/bin`.
 
 Rationale: it is Go's own mechanism, works identically on macOS, Linux and
-Windows (including the `.exe` suffix), and requires no setup on a new machine
-beyond having Go installed. No new directory convention is invented, and the
-repo never grows a `bin/` to gitignore.
+Windows (including the `.exe` suffix), and invents no new directory convention.
+The repo never grows a `bin/` to gitignore.
 
-`~/Workspace/bin` is deleted as part of this work; its only content is a
-`gosec` binary that `go install` can replace.
+**Machine-specific correction (verified 2026-09-19):** on this machine
+`GOPATH` is `/Users/cding/.local/share/go` (not `~/go`), `GOBIN` is unset, and
+that `bin` directory — which already contains `dlv`, `goose` and `gosec` — is
+**not** on `PATH`. Meanwhile `PATH` contains `~/go/bin` twice, and that
+directory does not exist. Setup therefore requires adding
+`$(go env GOPATH)/bin` to `PATH` in the shell profile and removing the two dead
+`~/go/bin` entries. This is a one-time, per-machine step, not a per-tool one.
+
+`~/Workspace/bin` is deleted as part of this work; it is not on `PATH` at all,
+and its only content is a `gosec` binary that `go install` can replace.
 
 ### 2.6 Cross-platform is a hard requirement
 
@@ -255,5 +262,5 @@ error-prone one. It gets its own requirement document and its own design pass.
 3. `tool-index`, dogfooding every convention in §3
 4. `tools.toml` and `sync-permissions`
 5. GitHub Actions matrix for ubuntu / macos / windows
-6. `go.work` wiring; delete `~/Workspace/bin`; standardize on `~/go/bin`
+6. `go.work` wiring; delete `~/Workspace/bin`; PATH fix for `$(go env GOPATH)/bin`
 7. Skills `sys-tools` and `create-sys-tools`, with their symlinks
