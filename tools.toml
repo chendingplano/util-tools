@@ -9,3 +9,7 @@
 [tool-index]
 expose = "discoverable"
 mode = "ask"
+
+[typst-ref]
+expose = "off"
+mode = "ask"
