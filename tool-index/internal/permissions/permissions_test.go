@@ -48,7 +48,7 @@ func TestApplyPreservesOtherKeys(t *testing.T) {
 	path := filepath.Join(dir, "settings.json")
 	os.WriteFile(path, []byte(settings), 0o644)
 
-	if err := Apply(path, []string{"Bash(typst-ref:*)"}); err != nil {
+	if _, err := Apply(path, []string{"Bash(typst-ref:*)"}); err != nil {
 		t.Fatalf("Apply() error = %v", err)
 	}
 
@@ -79,7 +79,7 @@ func TestApplyWritesBackup(t *testing.T) {
 	path := filepath.Join(dir, "settings.json")
 	os.WriteFile(path, []byte(settings), 0o644)
 
-	if err := Apply(path, []string{"Bash(typst-ref:*)"}); err != nil {
+	if _, err := Apply(path, []string{"Bash(typst-ref:*)"}); err != nil {
 		t.Fatalf("Apply() error = %v", err)
 	}
 	b, err := os.ReadFile(path + ".bak")
@@ -91,13 +91,64 @@ func TestApplyWritesBackup(t *testing.T) {
 	}
 }
 
+func TestApplyPermissionsNullDoesNotPanic(t *testing.T) {
+	// "permissions": null is valid JSON and appears in real settings files
+	// before any tool has ever added an allow entry; Apply must not panic
+	// with "assignment to entry in nil map".
+	dir := t.TempDir()
+	path := filepath.Join(dir, "settings.json")
+	os.WriteFile(path, []byte(`{"permissions": null}`), 0o644)
+
+	if _, err := Apply(path, []string{"Bash(typst-ref:*)"}); err != nil {
+		t.Fatalf("Apply() error = %v", err)
+	}
+
+	allow, err := ReadAllow(path)
+	if err != nil {
+		t.Fatalf("ReadAllow() error = %v", err)
+	}
+	if len(allow) != 1 || allow[0] != "Bash(typst-ref:*)" {
+		t.Errorf("allow = %v, want [Bash(typst-ref:*)]", allow)
+	}
+}
+
+func TestApplyDoesNotClobberExistingBackup(t *testing.T) {
+	// A second successful Apply must not overwrite the .bak from the first
+	// one: that .bak is the only copy of the pre-any-change original.
+	dir := t.TempDir()
+	path := filepath.Join(dir, "settings.json")
+	os.WriteFile(path, []byte(settings), 0o644)
+
+	if _, err := Apply(path, []string{"Bash(typst-ref:*)"}); err != nil {
+		t.Fatalf("first Apply() error = %v", err)
+	}
+	firstBak, err := os.ReadFile(path + ".bak")
+	if err != nil {
+		t.Fatalf("backup not written after first Apply: %v", err)
+	}
+	if string(firstBak) != settings {
+		t.Fatalf("first backup = %s, want original settings", firstBak)
+	}
+
+	if _, err := Apply(path, []string{"Bash(other-tool:*)"}); err != nil {
+		t.Fatalf("second Apply() error = %v", err)
+	}
+	secondBak, err := os.ReadFile(path + ".bak")
+	if err != nil {
+		t.Fatalf("backup missing after second Apply: %v", err)
+	}
+	if string(secondBak) != string(firstBak) {
+		t.Errorf(".bak was overwritten by second Apply: got %s, want unchanged %s", secondBak, firstBak)
+	}
+}
+
 func TestApplyIsIdempotent(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "settings.json")
 	os.WriteFile(path, []byte(settings), 0o644)
 
-	Apply(path, []string{"Bash(typst-ref:*)"})
-	Apply(path, []string{"Bash(typst-ref:*)"})
+	_, _ = Apply(path, []string{"Bash(typst-ref:*)"})
+	_, _ = Apply(path, []string{"Bash(typst-ref:*)"})
 
 	allow, _ := ReadAllow(path)
 	count := 0
