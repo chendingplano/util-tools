@@ -17,7 +17,7 @@ func write(t *testing.T, dir, name, body string) {
 func TestLoadDefaults(t *testing.T) {
 	dir := t.TempDir()
 	write(t, dir, "tools.toml", `
-[tool-index]
+[widget-tool]
 expose = "discoverable"
 mode = "auto"
 
@@ -35,11 +35,33 @@ mode = "ask"
 	if got := s["sparse-tool"]; got.Expose != ExposeOff || got.Mode != ModeAsk {
 		t.Errorf("sparse-tool = %+v, want off/ask", got)
 	}
-	if got, want := s.Discoverable(), []string{"tool-index"}; !reflect.DeepEqual(got, want) {
+	if got, want := s.Discoverable(), []string{"widget-tool"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("Discoverable() = %v, want %v", got, want)
 	}
-	if got, want := s.AutoMode(), []string{"tool-index"}; !reflect.DeepEqual(got, want) {
+	if got, want := s.AutoMode(), []string{"widget-tool"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("AutoMode() = %v, want %v", got, want)
+	}
+}
+
+func TestLoadRejectsSelfAuto(t *testing.T) {
+	// tool-index is the permission-granting tool itself: mode=auto on it
+	// would let an agent, once allowed to run tool-index unprompted, use
+	// sync-permissions --write to grant itself arbitrary further
+	// permissions. Load must reject this regardless of expose.
+	dir := t.TempDir()
+	write(t, dir, "tools.toml", "[tool-index]\nexpose = \"discoverable\"\nmode = \"auto\"\n")
+	if _, err := Load(dir); err == nil {
+		t.Error("Load() = nil error, want error for tool-index mode=auto")
+	}
+}
+
+func TestLoadAllowsOtherToolAuto(t *testing.T) {
+	// The restriction is specific to tool-index; any other tool may use
+	// mode=auto freely.
+	dir := t.TempDir()
+	write(t, dir, "tools.toml", "[typst-ref]\nexpose = \"discoverable\"\nmode = \"auto\"\n")
+	if _, err := Load(dir); err != nil {
+		t.Errorf("Load() error = %v, want nil for a non-self tool at mode=auto", err)
 	}
 }
 

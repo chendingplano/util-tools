@@ -29,6 +29,14 @@ const (
 	ModeAuto Mode = "auto"
 )
 
+// SelfName is tool-index's own name in tools.toml. tool-index is the tool
+// that grants permissions to everything else (via sync-permissions), so it
+// must never itself be eligible for unprompted execution: an agent allowed
+// to run tool-index unprompted could point UTIL_TOOLS_CONFIG at a policy
+// file of its own choosing and use sync-permissions --write to grant itself
+// arbitrary further permissions. See Entry.validate.
+const SelfName = "tool-index"
+
 // Entry is one tool's policy. The zero value is the safe default:
 // invisible to agents, and prompted if run.
 type Entry struct {
@@ -116,6 +124,11 @@ func (e Entry) validate(name string) error {
 	default:
 		return fmt.Errorf("policy: tool %q: unknown mode %q (want %q or %q)",
 			name, e.Mode, ModeAsk, ModeAuto)
+	}
+	if name == SelfName && e.Mode == ModeAuto {
+		return fmt.Errorf(
+			"policy: tool %q may not use mode %q: it grants permissions, so auto-granting it would let an agent amend its own allowlist",
+			name, ModeAuto)
 	}
 	return nil
 }
