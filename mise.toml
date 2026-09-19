@@ -22,7 +22,7 @@ done
 description = "Run tests in every module, including _template"
 run = '''
 set -e
-for d in */ _*/; do
+for d in */; do
   [ -f "$d/go.mod" ] || continue
   echo "==> testing $d"
   (cd "$d" && go test ./...)
@@ -51,7 +51,7 @@ done
 description = "gofmt -w across all modules"
 run = '''
 set -e
-for d in */ _*/; do
+for d in */; do
   [ -f "$d/go.mod" ] || continue
   (cd "$d" && gofmt -w .)
 done
