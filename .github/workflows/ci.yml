@@ -6,14 +6,43 @@ on:
   workflow_dispatch:
 
 jobs:
+  discover:
+    name: Discover modules
+    runs-on: ubuntu-latest
+    outputs:
+      modules: ${{ steps.list.outputs.modules }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: List modules
+        id: list
+        shell: bash
+        run: |
+          set -e
+          # Every directory with a go.mod is a module CI must cover,
+          # including _-prefixed ones (e.g. _template) — the Go toolchain
+          # ignores their leading underscore, CI must not.
+          list=""
+          for f in */go.mod; do
+            d="${f%/go.mod}"
+            if [ -n "$list" ]; then
+              list="$list,\"$d\""
+            else
+              list="\"$d\""
+            fi
+          done
+          echo "modules=[$list]" >> "$GITHUB_OUTPUT"
+          echo "Discovered modules: [$list]"
+
   test:
+    needs: discover
     name: ${{ matrix.module }} on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        module: [_template, tool-index]
+        module: ${{ fromJSON(needs.discover.outputs.modules) }}
     defaults:
       run:
         working-directory: ${{ matrix.module }}
