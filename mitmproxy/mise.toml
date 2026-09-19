@@ -1,0 +1,3 @@
+[tasks.start-capture]
+run = "mitmdump --mode reverse:https://api.anthropic.com --listen-port 8000 -s rotating_capture.py"
+
