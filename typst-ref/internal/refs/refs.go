@@ -29,10 +29,30 @@ type Report struct {
 }
 
 var (
-	headingRe   = regexp.MustCompile(`(?m)^(=+)\s*(.+?)\s*$`)
-	refDefRe    = regexp.MustCompile(`^\[(\d+)\]:\s*(\S+)\s*"([^"]*)"\s*$`)
-	blankLineRe = regexp.MustCompile(`^\s*$`)
+	headingRe        = regexp.MustCompile(`(?m)^(=+)\s*(.+?)\s*$`)
+	refDefRe         = regexp.MustCompile(`^\[(\d+)\]:\s*(\S+)\s*"([^"]*)"\s*$`)
+	blankLineRe      = regexp.MustCompile(`^\s*$`)
+	bibliographyCall = regexp.MustCompile(`(?m)^\s*#bibliography\(`)
 )
+
+// EnsureBibliography appends a #bibliography(bibRelPath) call to content when
+// one isn't already present, so @key citations Process rewrote actually
+// resolve instead of erroring as undefined labels. bibRelPath is the bib
+// file's path relative to the Typst file (Process itself never sees real
+// paths, so callers compute this). A no-op when bibRelPath is empty or a
+// #bibliography( call already exists anywhere in content.
+func EnsureBibliography(content, bibRelPath string) (string, bool) {
+	if bibRelPath == "" || bibliographyCall.MatchString(content) {
+		return content, false
+	}
+	sep := "\n"
+	if content == "" || strings.HasSuffix(content, "\n\n") {
+		sep = ""
+	} else if !strings.HasSuffix(content, "\n") {
+		sep = "\n\n"
+	}
+	return content + sep + fmt.Sprintf("#bibliography(%q)\n", bibRelPath), true
+}
 
 // Slugify derives a bib entry key from a title: lowercase, non-alphanumeric
 // runs collapsed to a single hyphen, leading/trailing hyphens trimmed.

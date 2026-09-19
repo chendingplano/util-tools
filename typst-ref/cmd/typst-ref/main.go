@@ -39,15 +39,16 @@ type jsonReference struct {
 }
 
 type jsonReport struct {
-	File           string          `json:"file"`
-	Bib            string          `json:"bib"`
-	DryRun         bool            `json:"dry_run"`
-	SectionFound   bool            `json:"section_found"`
-	SectionRemoved bool            `json:"section_removed"`
-	Added          []jsonReference `json:"added"`
-	AlreadyPresent []jsonReference `json:"already_present"`
-	Replaced       int             `json:"replaced"`
-	Warnings       []string        `json:"warnings"`
+	File              string          `json:"file"`
+	Bib               string          `json:"bib"`
+	DryRun            bool            `json:"dry_run"`
+	SectionFound      bool            `json:"section_found"`
+	SectionRemoved    bool            `json:"section_removed"`
+	Added             []jsonReference `json:"added"`
+	AlreadyPresent    []jsonReference `json:"already_present"`
+	Replaced          int             `json:"replaced"`
+	BibliographyAdded bool            `json:"bibliography_added"`
+	Warnings          []string        `json:"warnings"`
 }
 
 func toJSONRefs(rs []refs.Reference) []jsonReference {
@@ -111,6 +112,16 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
+	bibliographyAdded := false
+	if report.Replaced > 0 {
+		relBib, err := relBibPath(typPath, bibPath)
+		if err != nil {
+			fmt.Fprintf(stderr, "typst-ref: %v\n", err)
+			return 1
+		}
+		newTyp, bibliographyAdded = refs.EnsureBibliography(newTyp, relBib)
+	}
+
 	if !*dryRun {
 		if len(report.Added) > 0 {
 			if err := writeFileAtomic(bibPath, newBib); err != nil {
@@ -128,15 +139,16 @@ func run(args []string, stdout, stderr io.Writer) int {
 
 	if *asJSON {
 		out := jsonReport{
-			File:           typPath,
-			Bib:            bibPath,
-			DryRun:         *dryRun,
-			SectionFound:   report.SectionFound,
-			SectionRemoved: report.SectionRemoved,
-			Added:          toJSONRefs(report.Added),
-			AlreadyPresent: toJSONRefs(report.AlreadyPresent),
-			Replaced:       report.Replaced,
-			Warnings:       report.Warnings,
+			File:              typPath,
+			Bib:               bibPath,
+			DryRun:            *dryRun,
+			SectionFound:      report.SectionFound,
+			SectionRemoved:    report.SectionRemoved,
+			Added:             toJSONRefs(report.Added),
+			AlreadyPresent:    toJSONRefs(report.AlreadyPresent),
+			Replaced:          report.Replaced,
+			BibliographyAdded: bibliographyAdded,
+			Warnings:          report.Warnings,
 		}
 		if out.Added == nil {
 			out.Added = []jsonReference{}
@@ -156,11 +168,11 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 
-	printReport(stdout, stderr, typPath, bibPath, report, *dryRun)
+	printReport(stdout, stderr, typPath, bibPath, report, bibliographyAdded, *dryRun)
 	return 0
 }
 
-func printReport(stdout, stderr io.Writer, typPath, bibPath string, report refs.Report, dryRun bool) {
+func printReport(stdout, stderr io.Writer, typPath, bibPath string, report refs.Report, bibliographyAdded, dryRun bool) {
 	prefix := ""
 	if dryRun {
 		prefix = "[dry-run] "
@@ -180,6 +192,9 @@ func printReport(stdout, stderr io.Writer, typPath, bibPath string, report refs.
 	}
 	if report.SectionRemoved {
 		fmt.Fprintf(stdout, "%sremoved References section from %s\n", prefix, typPath)
+	}
+	if bibliographyAdded {
+		fmt.Fprintf(stdout, "%sadded #bibliography(...) call to %s\n", prefix, typPath)
 	}
 	for _, w := range report.Warnings {
 		fmt.Fprintf(stderr, "typst-ref: warning: %s\n", w)
@@ -205,6 +220,24 @@ func findBibPath(typPath string) (string, error) {
 		}
 		dir = parent
 	}
+}
+
+// relBibPath returns bibPath relative to typPath's directory, in Typst's
+// forward-slash path form, for use in a #bibliography(...) call.
+func relBibPath(typPath, bibPath string) (string, error) {
+	typDir, err := filepath.Abs(filepath.Dir(typPath))
+	if err != nil {
+		return "", err
+	}
+	absBib, err := filepath.Abs(bibPath)
+	if err != nil {
+		return "", err
+	}
+	rel, err := filepath.Rel(typDir, absBib)
+	if err != nil {
+		return "", err
+	}
+	return filepath.ToSlash(rel), nil
 }
 
 // writeFileAtomic writes content to path by writing a temp file in the same

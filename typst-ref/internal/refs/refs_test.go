@@ -249,6 +249,56 @@ func TestProcessGoldenFixture(t *testing.T) {
 	}
 }
 
+func TestEnsureBibliographyAddsWhenMissing(t *testing.T) {
+	content := "Body text @introduction-typesafe-ai.\n"
+	got, added := EnsureBibliography(content, "../references/references.bib")
+	if !added {
+		t.Fatalf("EnsureBibliography() added = false, want true")
+	}
+	if !strings.Contains(got, `#bibliography("../references/references.bib")`) {
+		t.Errorf("EnsureBibliography() = %q, missing #bibliography call", got)
+	}
+	if !strings.HasPrefix(got, content) {
+		t.Errorf("EnsureBibliography() should append, got %q", got)
+	}
+}
+
+func TestEnsureBibliographyNoopWhenPresent(t *testing.T) {
+	content := "Body text @x.\n\n#bibliography(\"references/references.bib\")\n"
+	got, added := EnsureBibliography(content, "references/references.bib")
+	if added {
+		t.Errorf("EnsureBibliography() added = true, want false (already present)")
+	}
+	if got != content {
+		t.Errorf("EnsureBibliography() modified content when a call already exists:\n%s", got)
+	}
+}
+
+func TestEnsureBibliographyNoopWhenPathEmpty(t *testing.T) {
+	content := "Body text, no citations.\n"
+	got, added := EnsureBibliography(content, "")
+	if added || got != content {
+		t.Errorf("EnsureBibliography() with empty path should be a no-op")
+	}
+}
+
+func TestProcessAddsBibliographyCallViaEnsure(t *testing.T) {
+	newTyp, _, report, err := Process(docExample, "")
+	if err != nil {
+		t.Fatalf("Process() error = %v", err)
+	}
+	if report.Replaced == 0 {
+		t.Fatalf("expected citations to be replaced")
+	}
+	final, added := EnsureBibliography(newTyp, "../references/references.bib")
+	if !added {
+		t.Fatalf("expected EnsureBibliography to add a call after Process")
+	}
+	if !strings.Contains(final, `#bibliography("../references/references.bib")`) {
+		t.Errorf("final content missing bibliography call:\n%s", final)
+	}
+}
+
 func TestProcessSubsectionHeading(t *testing.T) {
 	typContent := `Body text ([X][1]).
 

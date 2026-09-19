@@ -55,6 +55,40 @@ func TestRunWritesTypAndBib(t *testing.T) {
 	if !strings.Contains(string(gotBib), "@online{example-page,") {
 		t.Errorf("bib file missing entry:\n%s", gotBib)
 	}
+	if !strings.Contains(string(gotTyp), `#bibliography("references/references.bib")`) {
+		t.Errorf("typ file missing #bibliography(...) call so @example-page would fail to resolve:\n%s", gotTyp)
+	}
+}
+
+func TestRunDoesNotDuplicateExistingBibliographyCall(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "references"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	typPath := filepath.Join(root, "Notes.typ")
+	content := `See ([Example][1]).
+
+= References
+[1]: https://example.com/page "Example Page"
+
+#bibliography("references/references.bib")
+`
+	if err := os.WriteFile(typPath, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var out, errOut bytes.Buffer
+	code := run([]string{typPath}, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("run() = %d, stderr = %q", code, errOut.String())
+	}
+	gotTyp, err := os.ReadFile(typPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := strings.Count(string(gotTyp), "#bibliography("); n != 1 {
+		t.Errorf("typ file has %d #bibliography( calls, want 1:\n%s", n, gotTyp)
+	}
 }
 
 func TestRunDryRunWritesNothing(t *testing.T) {
