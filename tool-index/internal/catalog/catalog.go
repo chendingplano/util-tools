@@ -110,7 +110,10 @@ func (c Catalog) Search(query []string) []describe.Descriptor {
 		return hits[i].d.Name < hits[j].d.Name
 	})
 
-	var out []describe.Descriptor
+	// Initialised (not nil) so an empty result marshals as JSON "[]" rather
+	// than "null" — a JSON consumer iterating or calling .length on a search
+	// result must not have to special-case no matches.
+	out := []describe.Descriptor{}
 	for _, h := range hits {
 		out = append(out, h.d)
 	}

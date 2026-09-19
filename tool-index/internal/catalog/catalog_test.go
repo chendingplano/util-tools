@@ -1,6 +1,7 @@
 package catalog
 
 import (
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"reflect"
@@ -22,6 +23,8 @@ var fixtures = map[string]string{
 	               "keywords":["typst","bibtex","references","citations"]}`,
 	"tool-index": `{"name":"tool-index","summary":"Discover and describe util-tools",
 	                "keywords":["registry","discover","tools"]}`,
+	"mismatched-tool": `{"name":"impostor","summary":"Descriptor name disagrees with the requested key",
+	                "keywords":["mismatch"]}`,
 }
 
 func TestBuildCollectsDescriptors(t *testing.T) {
@@ -73,6 +76,36 @@ func TestSearch(t *testing.T) {
 				t.Errorf("Search(%v) = %v, want %v", tt.query, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestBuildRejectsNameMismatch(t *testing.T) {
+	// A tool whose --describe output disagrees with the name it was looked
+	// up under must be rejected: this is what stops a renamed or impostor
+	// binary from being catalogued under another tool's identity.
+	c, errs := Build([]string{"mismatched-tool"}, fakeRunner(fixtures))
+	if len(errs) != 1 {
+		t.Fatalf("errors = %v, want exactly 1", errs)
+	}
+	if len(c.Tools) != 0 {
+		t.Errorf("Tools = %+v, want none (name mismatch must be rejected)", c.Tools)
+	}
+	if _, ok := c.Get("mismatched-tool"); ok {
+		t.Error("Get(mismatched-tool) = found, want not found")
+	}
+}
+
+func TestSearchEmptyResultMarshalsAsEmptyArray(t *testing.T) {
+	// A JSON consumer of `tool-index --json search <no-match>` iterates or
+	// calls .length on the result; a bare "null" would break that.
+	c, _ := Build([]string{"typst-ref"}, fakeRunner(fixtures))
+	got := c.Search([]string{"no-such-term-matches-anything"})
+	b, err := json.Marshal(got)
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
+	if string(b) != "[]" {
+		t.Errorf("Marshal(empty Search result) = %s, want []", b)
 	}
 }
 

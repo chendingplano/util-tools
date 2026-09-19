@@ -43,7 +43,7 @@ Usage:
   tool-index sync-permissions --settings PATH [--write]
 
 Flags:
-  --json        emit JSON
+  --json        emit JSON (recognised before or after the subcommand)
   --describe    print this tool's descriptor and exit
 `
 
@@ -71,9 +71,21 @@ func run(args []string, stdout, stderr io.Writer) int {
 
 	switch fs.Arg(0) {
 	case "search":
-		return cmdSearch(fs.Args()[1:], *asJSON, stdout, stderr)
+		rest, asJSONSub, err := parseSubArgs(fs.Args()[1:], *asJSON)
+		if err != nil {
+			fmt.Fprintf(stderr, "tool-index: %v\n\n", err)
+			fs.Usage()
+			return 2
+		}
+		return cmdSearch(rest, asJSONSub, stdout, stderr)
 	case "describe":
-		return cmdDescribe(fs.Args()[1:], *asJSON, stdout, stderr)
+		rest, asJSONSub, err := parseSubArgs(fs.Args()[1:], *asJSON)
+		if err != nil {
+			fmt.Fprintf(stderr, "tool-index: %v\n\n", err)
+			fs.Usage()
+			return 2
+		}
+		return cmdDescribe(rest, asJSONSub, stdout, stderr)
 	case "refresh":
 		return cmdRefresh(stdout, stderr)
 	case "sync-permissions":
@@ -83,6 +95,50 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fs.Usage()
 		return 2
 	}
+}
+
+// parseSubArgs extracts a --json flag from a subcommand's own arguments.
+// Flag-last ("tool-index search foo --json") is the commoner convention for
+// agents, but the top-level flag.FlagSet only recognises flags that appear
+// before the subcommand, so --json must also be recognised here, wherever it
+// appears among the subcommand's arguments. Any other leading-dash argument
+// is treated as an unrecognised flag (a usage error), never silently folded
+// into the query/name positional arguments.
+func parseSubArgs(args []string, topJSON bool) (rest []string, asJSON bool, err error) {
+	asJSON = topJSON
+	for _, a := range args {
+		switch a {
+		case "--json", "-json":
+			asJSON = true
+		default:
+			if len(a) > 1 && strings.HasPrefix(a, "-") {
+				return nil, false, fmt.Errorf("unrecognized flag %q", a)
+			}
+			rest = append(rest, a)
+		}
+	}
+	return rest, asJSON, nil
+}
+
+// discoverableSet freshly loads policy and returns the set of tool names
+// agents may currently discover. It is consulted at query time (not just at
+// catalog-build time) so that revoking exposure in tools.toml takes effect
+// immediately, without requiring `tool-index refresh`.
+func discoverableSet() (map[string]bool, error) {
+	dir, err := policy.FindDir()
+	if err != nil {
+		return nil, err
+	}
+	set, err := policy.Load(dir)
+	if err != nil {
+		return nil, err
+	}
+	names := set.Discoverable()
+	out := make(map[string]bool, len(names))
+	for _, n := range names {
+		out[n] = true
+	}
+	return out, nil
 }
 
 // catalogPath honours UTIL_TOOLS_CATALOG so tests and unusual setups can
@@ -132,7 +188,12 @@ func cmdSearch(args []string, asJSON bool, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "tool-index: %v\n", err)
 		return 1
 	}
-	hits := c.Search(args)
+	discoverable, err := discoverableSet()
+	if err != nil {
+		fmt.Fprintf(stderr, "tool-index: %v\n", err)
+		return 1
+	}
+	hits := filterDiscoverable(c.Search(args), discoverable)
 	if asJSON {
 		return writeJSON(stdout, stderr, hits)
 	}
@@ -162,8 +223,16 @@ func cmdDescribe(args []string, asJSON bool, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "tool-index: %v\n", err)
 		return 1
 	}
+	discoverable, err := discoverableSet()
+	if err != nil {
+		fmt.Fprintf(stderr, "tool-index: %v\n", err)
+		return 1
+	}
+	// A tool that exists in the cache but is no longer exposed (expose was
+	// flipped to "off" since the cache was built) must be reported exactly
+	// like an unknown tool — never leak that it once existed or still does.
 	d, ok := c.Get(args[0])
-	if !ok {
+	if !ok || !discoverable[args[0]] {
 		fmt.Fprintf(stderr, "tool-index: no exposed tool named %q\n", args[0])
 		return 1
 	}
@@ -171,6 +240,19 @@ func cmdDescribe(args []string, asJSON bool, stdout, stderr io.Writer) int {
 		return writeJSON(stdout, stderr, d)
 	}
 	return writeHuman(stdout, stderr, d)
+}
+
+// filterDiscoverable drops any descriptor whose tool is not currently
+// exposed, so a revoked "expose = off" tool disappears from search results
+// without waiting for `tool-index refresh`.
+func filterDiscoverable(hits []describe.Descriptor, discoverable map[string]bool) []describe.Descriptor {
+	out := make([]describe.Descriptor, 0, len(hits))
+	for _, d := range hits {
+		if discoverable[d.Name] {
+			out = append(out, d)
+		}
+	}
+	return out
 }
 
 func writeHuman(stdout, stderr io.Writer, d describe.Descriptor) int {
@@ -264,11 +346,12 @@ func cmdSyncPermissions(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "\n%d entr(ies) would be added to %s; re-run with --write to apply\n", len(add), path)
 		return 0
 	}
-	if err := permissions.Apply(path, add); err != nil {
+	bak, err := permissions.Apply(path, add)
+	if err != nil {
 		fmt.Fprintf(stderr, "tool-index: %v\n", err)
 		return 1
 	}
-	fmt.Fprintf(stdout, "\nadded %d entr(ies) to %s (backup at %s.bak)\n", len(add), path, path)
+	fmt.Fprintf(stdout, "\nadded %d entr(ies) to %s (backup at %s)\n", len(add), path, bak)
 	return 0
 }
 
