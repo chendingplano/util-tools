@@ -18,7 +18,7 @@ const descriptor = `{
   "summary": "Count lines and words in a file or stdin",
   "keywords": ["count", "lines", "words", "text", "example"],
   "args": [
-    {"name": "file", "type": "path", "required": true, "help": "Input file, or - for stdin"},
+    {"name": "file", "type": "path", "required": false, "help": "Input file; reads stdin when absent or -"},
     {"name": "--json", "type": "bool", "help": "Emit JSON instead of text"}
   ],
   "examples": ["example-tool notes.txt", "cat notes.txt | example-tool -"]

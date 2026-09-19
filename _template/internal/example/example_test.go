@@ -1,6 +1,7 @@
 package example
 
 import (
+	"os"
 	"strings"
 	"testing"
 )
@@ -28,5 +29,25 @@ func TestCount(t *testing.T) {
 				t.Errorf("Count() = %+v, want %+v", got, tt.want)
 			}
 		})
+	}
+}
+
+// TestCountFromTestdata reads a golden fixture rather than an inline string,
+// demonstrating the testdata/ directory the repo conventions contract
+// requires every tool to have.
+func TestCountFromTestdata(t *testing.T) {
+	f, err := os.Open("../../testdata/sample.txt")
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	defer f.Close()
+
+	got, err := Count(f)
+	if err != nil {
+		t.Fatalf("Count() error = %v", err)
+	}
+	want := Result{Lines: 2, Words: 5}
+	if got != want {
+		t.Errorf("Count(testdata/sample.txt) = %+v, want %+v", got, want)
 	}
 }
