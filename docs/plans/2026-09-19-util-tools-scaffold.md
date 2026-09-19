@@ -2395,12 +2395,19 @@ use (
 - [ ] **Step 2: Verify the workspace resolves**
 
 ```bash
-cd /Users/cding/Workspace && go work sync && go build ./Utils/...
+cd /Users/cding/Workspace && go work sync && go build ./Utils/tool-index/...
 ```
 Expected: no output (success).
 
-**Verified behaviour — do not treat as a bug:** `./...` patterns skip
-`_`-prefixed directories, so the command above builds `tool-index` only.
+**Verified behaviour — do not treat as a bug:** `go build ./Utils/...` does NOT
+work from the workspace root. Go rejects it with "directory prefix Utils does
+not contain modules listed in go.work or their selected dependencies", because
+the pattern prefix must itself be a module directory. This is pre-existing and
+general — `go build ./ThirdParty/...` fails identically and predates this plan.
+Address each module directly, as above.
+
+Separately, `./...` patterns skip `_`-prefixed directories, so no workspace-root
+pattern reaches `_template` regardless.
 `go.work` still accepts `use ./Utils/_template`, and the module builds and
 tests normally from inside its own directory. Confirm it explicitly:
 
