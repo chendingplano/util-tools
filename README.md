@@ -52,12 +52,19 @@ mode   = "ask"            # "ask" | "auto"
 ```
 
 - `expose = "off"` — `tool-index search` never returns it. Invisible to agents,
-  still usable by a human at a shell.
+  still usable by a human at a shell. `search` and `describe` re-check
+  `tools.toml` on every call, so flipping a tool to `off` takes effect
+  immediately, without waiting for `tool-index refresh`.
 - `mode = "auto"` — `tool-index sync-permissions` emits a `Bash(<name>:*)`
   allowlist entry so agents are not prompted.
 - `mode = "ask"` — omitted from the allowlist; each invocation prompts.
 
 New tools are registered `off` / `ask`. Exposure is opted into deliberately.
+
+`tool-index` itself may never be `mode = "auto"`: it is the tool that grants
+permissions (via `sync-permissions --write`), so auto-granting it would let
+an agent run it unprompted and use it to amend its own allowlist. `tools.toml`
+setting `tool-index` to `auto` fails to load.
 
 `tool-index` locates `tools.toml` by checking, in order: `$UTIL_TOOLS_CONFIG`,
 then `$UTIL_TOOLS_HOME/tools.toml`, then

@@ -62,7 +62,7 @@ Metadata lives next to the code so it cannot drift from behaviour:
   "summary": "One line, imperative, what the tool does",
   "keywords": ["searchable", "terms"],
   "args": [
-    {"name": "file", "type": "path", "required": true, "help": "Input file, or - for stdin"},
+    {"name": "file", "type": "path", "required": false, "help": "Input file; reads stdin when absent or -"},
     {"name": "--out", "type": "path", "default": "out.txt", "help": "Destination"}
   ],
   "examples": ["example-tool input.txt --out result.txt"]
@@ -103,6 +103,11 @@ Table-driven unit tests against the library packages, with golden files in
 A tool is invisible to agents until opted in via `tools.toml`. New tools are
 registered as `expose = "off"`, `mode = "ask"`. See `README.md` for the
 policy format.
+
+`tool-index` — the tool that grants permissions, via `sync-permissions
+--write` — must never itself be `mode = "auto"`: an agent allowed to run it
+unprompted could use it to grant itself further, arbitrary permissions.
+`tools.toml` setting `tool-index` to `auto` fails to load.
 
 ## Version control
 
