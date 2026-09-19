@@ -2677,9 +2677,10 @@ rules, and where the two appear to disagree, `AGENTS.md` wins.
    - `go.mod` module path → `github.com/chendingplano/util-tools/<name>`
    - `cmd/example-tool/` → `cmd/<name>/`
    - `internal/example/` → a package named for what it does
-   - the `descriptor` constant: `name` MUST equal the binary name; `summary`
-     one line; `keywords` must include the words a user would actually type
-     when searching, or the tool will be undiscoverable
+   - the `descriptor` constant — see "The descriptor" in `AGENTS.md` for the
+     required fields and their rules. Get `keywords` right: it is what
+     `tool-index search` matches against, and a tool with poor keywords is
+     undiscoverable no matter how good it is
    - `README.md`
 
 5. **Register the module** in `/Users/cding/Workspace/go.work` under `use (`.
@@ -2697,9 +2698,10 @@ rules, and where the two appear to disagree, `AGENTS.md` wins.
    tool as discoverable, and never as `auto`, even if asked to "set it up
    fully" — raise it as a separate question instead.
 
-7. **Write the failing test first.** Table-driven, against the library
-   package. Include a CRLF case for any tool that parses text — it is the
-   cross-platform rule most often violated.
+7. **Write the failing test first.** Table-driven, against the library package.
+   Re-read the Testing and Cross-platform rules sections of `AGENTS.md` before
+   writing the table; tools that parse text have a rule there that is easy to
+   miss and easy to get wrong.
 
 8. **Implement** the library, then the thin `cmd/`.
 
