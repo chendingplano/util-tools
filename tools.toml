@@ -1,0 +1,11 @@
+# Agent exposure policy. Committed defaults; override per machine in
+# tools.local.toml (gitignored).
+#
+#   expose = "off" | "discoverable"   -- may agents discover this tool
+#   mode   = "ask" | "auto"           -- may agents run it without prompting
+#
+# New tools are registered off/ask. Exposure is opted into deliberately.
+
+[tool-index]
+expose = "discoverable"
+mode = "ask"
