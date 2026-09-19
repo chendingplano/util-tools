@@ -20,7 +20,8 @@
 - **Cross-platform (all three of macOS, Linux, Windows):** use `path/filepath` never `path`; `os.TempDir()` never a literal `/tmp`; normalize CRLF on read; never shell out to `sed`/`grep`/`find`; do not assume case-sensitive paths or symlink availability; write files `0644`, directories `0755`.
 - **Exit codes:** `0` success, `1` tool error, `2` usage error.
 - **Out of scope:** `typst-ref` is NOT built by this plan. Do not create it.
-- **Verified machine facts (do not re-derive):** `go env GOPATH` = `/Users/cding/.local/share/go`; `GOBIN` unset; `/Users/cding/.local/share/go/bin` exists (holds `dlv`, `goose`, `gosec`) but is NOT on `PATH`; `~/go/bin` is on `PATH` twice but does not exist; `~/Workspace/bin` is not on `PATH` and holds only `gosec`.
+- **Verified machine facts (do not re-derive, do not re-investigate):** `go env GOPATH` = `/Users/cding/.local/share/go`, holding the pre-existing `dlv`, `goose`, `gosec`, and NOT on `PATH`. `~/go/bin` is on `PATH` twice — placed there by nix home-manager at `nix/modules/home/home.nix:17,84-87` — but does not exist. `~/.zshrc` sets no Go PATH entries. `~/Workspace/bin` is not on `PATH` and holds only `gosec`.
+- **Install target decided by the user:** `go env -w GOBIN="$HOME/go/bin"`, so installs land where nix already points. Do NOT edit `~/.zshrc`, and do NOT edit the nix configuration.
 
 ---
 
@@ -194,12 +195,16 @@ Requires Go 1.25+ and `mise`.
 mise install-all      # go install ./cmd/... in every tool module
 ```
 
-Binaries land in `$(go env GOBIN)`, falling back to `$(go env GOPATH)/bin`.
-That directory must be on your `PATH`:
+Binaries land in `$(go env GOBIN)`. On this machine that is set to
+`~/go/bin`, which is already on `PATH`:
 
 ```bash
-export PATH="$(go env GOPATH)/bin:$PATH"
+go env -w GOBIN="$HOME/go/bin"   # one-time, per machine
 ```
+
+On a fresh machine without that setting, binaries land in
+`$(go env GOPATH)/bin` instead — put whichever one `go env GOBIN` reports on
+your `PATH`.
 
 ## Tasks
 
@@ -238,8 +243,11 @@ New tools are registered `off` / `ask`. Exposure is opted into deliberately.
 
 `tool-index` locates `tools.toml` by checking, in order: `$UTIL_TOOLS_CONFIG`,
 then `$UTIL_TOOLS_HOME/tools.toml`, then
-`<os.UserConfigDir()>/util-tools/tools.toml`. Set `UTIL_TOOLS_HOME` to this
-repo:
+`<os.UserConfigDir()>/util-tools/tools.toml`.
+
+`mise.toml` sets `UTIL_TOOLS_HOME` to this repo, so mise tasks work with no
+setup. To use `tool-index` against this repo's policy from an ordinary shell,
+export it yourself:
 
 ```bash
 export UTIL_TOOLS_HOME="$HOME/Workspace/Utils"
@@ -253,6 +261,11 @@ Each tool is its own module, so `./...` cannot cross module boundaries — the t
 ```toml
 [tools]
 go = "1.25"
+
+# Makes the repo self-contained: tool-index finds tools.toml without the user
+# having to export anything. Outside mise it falls back to the user config dir.
+[env]
+UTIL_TOOLS_HOME = "{{config_root}}"
 
 [tasks.install-all]
 description = "Install every tool to the Go bin directory"
@@ -281,6 +294,7 @@ done
 description = "Cross-compile release artifacts into dist/"
 run = '''
 set -e
+mkdir -p dist
 for d in */; do
   case "$d" in _*) continue;; esac
   [ -f "$d/go.mod" ] || continue
@@ -305,32 +319,36 @@ done
 '''
 ```
 
-- [ ] **Step 6: Fix PATH and remove the dead entries**
+- [ ] **Step 6: Make installed binaries reachable via GOBIN**
 
-`~/go/bin` appears twice in PATH and does not exist; the real Go bin directory is not on PATH at all. Inspect first, then edit:
+**Do not edit `~/.zshrc`, and do not edit the nix config.** Verified: `~/.zshrc`
+contains no Go PATH entries. PATH is declaratively managed by nix home-manager
+at `/Users/cding/Workspace/nix/modules/home/home.nix` (lines 17 and 84-87),
+which already places `$HOME/go/bin` on PATH twice — but that directory does not
+exist, which is why `go install` currently produces unreachable binaries.
 
-```bash
-grep -n 'go/bin\|GOPATH\|UTIL_TOOLS_HOME' ~/.zshrc
-```
-
-Replace the dead `~/go/bin` entries with the real one, and add `UTIL_TOOLS_HOME`:
-
-```bash
-export PATH="$(go env GOPATH)/bin:$PATH"
-export UTIL_TOOLS_HOME="$HOME/Workspace/Utils"
-```
-
-Verify in a fresh shell:
+The user chose to point `GOBIN` at the directory nix already exports, which
+takes effect immediately with no rebuild and no shell restart:
 
 ```bash
-zsh -lc 'echo $PATH | tr ":" "\n" | grep -c "$(go env GOPATH)/bin"'
+go env -w GOBIN="$HOME/go/bin"
 ```
-Expected: `1` or more.
+
+Verify:
 
 ```bash
-zsh -lc 'command -v goose'
+go env GOBIN
 ```
-Expected: `/Users/cding/.local/share/go/bin/goose` — proof the directory is now live.
+Expected: `/Users/cding/go/bin`.
+
+```bash
+zsh -lc 'echo $PATH' | tr ":" "\n" | grep -c "$HOME/go/bin"
+```
+Expected: `2` or more — nix already puts it there; nothing needs adding.
+
+Note that `$(go env GOPATH)/bin` (`/Users/cding/.local/share/go/bin`) keeps the
+pre-existing `dlv`, `goose` and `gosec`. That split is accepted and recorded;
+do not attempt to consolidate it.
 
 - [ ] **Step 7: Delete `~/Workspace/bin`**
 
@@ -2473,7 +2491,10 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.25'
-          cache-dependency-path: ${{ matrix.module }}/go.sum
+          # _template has no external dependencies and therefore no go.sum;
+          # setup-go fails when cache-dependency-path matches no file. The
+          # dependency set is one TOML library, so the cache is worth nothing.
+          cache: false
 
       - name: Verify formatting
         shell: bash
