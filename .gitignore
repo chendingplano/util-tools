@@ -1,0 +1,8 @@
+# Per-machine policy override
+tools.local.toml
+
+# Cross-compiled release artifacts
+dist/
+
+# OS noise
+.DS_Store

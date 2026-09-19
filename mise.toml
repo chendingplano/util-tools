@@ -1,0 +1,58 @@
+[tools]
+go = "1.25"
+
+# Makes the repo self-contained: tool-index finds tools.toml without the user
+# having to export anything. Outside mise it falls back to the user config dir.
+[env]
+UTIL_TOOLS_HOME = "{{config_root}}"
+
+[tasks.install-all]
+description = "Install every tool to the Go bin directory"
+run = '''
+set -e
+for d in */; do
+  case "$d" in _*) continue;; esac
+  [ -f "$d/go.mod" ] || continue
+  echo "==> installing $d"
+  (cd "$d" && go install ./cmd/...)
+done
+'''
+
+[tasks.test-all]
+description = "Run tests in every module, including _template"
+run = '''
+set -e
+for d in */ _*/; do
+  [ -f "$d/go.mod" ] || continue
+  echo "==> testing $d"
+  (cd "$d" && go test ./...)
+done
+'''
+
+[tasks.build-all]
+description = "Cross-compile release artifacts into dist/"
+run = '''
+set -e
+mkdir -p dist
+for d in */; do
+  case "$d" in _*) continue;; esac
+  [ -f "$d/go.mod" ] || continue
+  name="${d%/}"
+  for platform in darwin/arm64 darwin/amd64 linux/amd64 linux/arm64 windows/amd64; do
+    os="${platform%/*}"; arch="${platform#*/}"
+    ext=""; [ "$os" = "windows" ] && ext=".exe"
+    echo "==> $name $os/$arch"
+    (cd "$d" && GOOS="$os" GOARCH="$arch" go build -o "../dist/${name}_${os}_${arch}${ext}" ./cmd/...)
+  done
+done
+'''
+
+[tasks.fmt]
+description = "gofmt -w across all modules"
+run = '''
+set -e
+for d in */ _*/; do
+  [ -f "$d/go.mod" ] || continue
+  (cd "$d" && gofmt -w .)
+done
+'''
